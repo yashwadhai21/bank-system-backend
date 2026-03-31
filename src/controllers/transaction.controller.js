@@ -11,7 +11,7 @@ async function createTransaction(req,res){
      * 1.Validate request
      */
     const {fromAccount , toAccount , amount , idempotencyKey} = req.body
-    if(!fromAccount || toAccount || amount || idempotencyKey){
+    if(!fromAccount || !toAccount || !amount || !idempotencyKey){
         return res.status(400).json({
             message:"fromAccount , toAccount , amount , idempotencyKey are required"
         })
@@ -22,7 +22,7 @@ async function createTransaction(req,res){
     const toUserAccount = await accountModel.findOne({
         _id:toAccount
     })
-    if(!fromUserAccount || toUserAccount){
+    if(!fromUserAccount || !toUserAccount){
         return res.status(400).json({
             mesage:"Inavlid fromAccount or ToAccount"
         })
@@ -80,52 +80,68 @@ async function createTransaction(req,res){
     /**
      * 5. Create Transaction (PENDING)
      */
+    let transaction;
+    try{
+
+    
     const session = await mongoose.startSession() //mongoose give functionality: ya to saare step (5 to 9) complete kro ya koi bhi mat kro
     session.startTransaction()
 
-    const transaction = await transactionModel.create({
+    transaction = (await transactionModel.create([{
         fromAccount,
         toAccount,
         amount,
         idempotencykey,
         status:"PENDING"
-    },{session}) //pass session here
+    }],{session}) )[0]
 
 
     /**
      * 6. Create Debit Entry
      */
-    const debitLEdgerEntry = await ledgerModel.create({
+    const debitLEdgerEntry = await ledgerModel.create([{
         account:fromAccount,
         amount:amount,
         transaction:transaction._id,
         type:"DEBIT"
-    },{session})
+    }],{session})
 
+
+    //creating simulation of paise cut gye pr phohoche nhi
+    //is dauran firse req daali to dobara pese nhi jaayenge coz idempotency key is same
+    await (()=>{
+        return new Promise((resolve)=> setTimeout(resolve,15*1000))
+    })
 
     /**
      * 7. Create Credit Entry
      */
-    const creditEdgerEntry = await ledgerModel.create({
+    const creditEdgerEntry = await ledgerModel.create([{
         account:toAccount,
         amount:amount,
         transaction:transaction._id,
         type:"CREDIT"
-    },{session})
-
+    }],{session})
 
     /**
      * 8. Mark transaction COMPLETED
      */
-    transaction.status = "COMPLETED"
-    await transaction.save({session})
+    await transactionModel.findByIdAndUpdate(
+        {_id:transaction._id},
+        {status:"COMPLETED"},
+        {session}
+    )
 
     /**
      * 9. COMMIT mongoDb session
      */
     await session.commitTransaction()
     session.endSession()
-
+    } catch(error){
+        return res.status(400).json({
+            message:"Transaction is pending due to some issue, please retry after some time"
+        })
+    }
     /**
      * 10. Send email Notification
      */
@@ -136,6 +152,75 @@ async function createTransaction(req,res){
     })
 }
 
+async function createInitialFundsTransaction(req,res){
+    const {toAccount , amount , idempotencyKey} = req.body
+
+    if(!toAccount || !amount || !idempotencyKey){
+        return res.status(400).json({
+            message:"toAccount , amount , idempotencyKey are required"
+        })
+    }
+
+    const toUserAccount = await accountModel.findOne({
+        _id:toAccount
+    })
+    if(!toUserAccount){
+        return res.status(400).json({
+            mesage:"Inavlid ToAccount"
+        })
+    }
+
+    const fromUserAccount = await accountModel.findOne({
+        systemUser:true,
+        user:req.user._id
+    })
+    if(!fromUserAccount){
+        return res.status(400).json({
+            mesage:"System User account not found"
+        })
+    }
+
+    const session = await mongoose.startSession() 
+    session.startTransaction()
+
+    const transaction = new transactionModel({
+        fromAccount,
+        toAccount,
+        amount,
+        idempotencykey,
+        status:"PENDING"
+    })
+    
+     const debitLEdgerEntry = await ledgerModel.create([{
+        account:fromAccount,
+        amount:amount,
+        transaction:transaction._id,
+        type:"DEBIT"
+    }],{session})
+
+
+    const creditEdgerEntry = await ledgerModel.create([{
+        account:toAccount,
+        amount:amount,
+        transaction:transaction._id,
+        type:"CREDIT"
+    }],{session})
+
+
+    transaction.status = "COMPLETED"
+    await transaction.save({session})
+
+    await session.commitTransaction()
+    session.endSession()
+
+    return res.status(201).json({
+        mesage:"Initial funds transaction completed successfully",
+        transaction:transaction
+    })
+
+}
+
 module.exports = {
-    createTransaction
+    createTransaction,
+    createInitialFundsTransaction
 }
