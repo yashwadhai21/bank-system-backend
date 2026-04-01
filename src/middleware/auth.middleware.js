@@ -6,13 +6,13 @@ async function authMiddleware(req,res,next){
     const token = req.cookies.token || req.headers.authorization?.split(" ")[1]
 
     if(!token){
-        return res.status(401).josn({
+        return res.status(401).json({
             message:"Unauthorized acces , token is missing"
         })
     }
 
     const isBlacklisted = await tokenBlackListModel.findOne({token})
-    if(!isBlacklisted){
+    if(isBlacklisted){
         return res.status(401).json({
             message:"Unauthorized Access, Token is Invalid"
         })
@@ -34,7 +34,7 @@ async function authMiddleware(req,res,next){
 }
 
 async function authSystemUserMiddleware(req,res,next){
-    const token =req.cookies.token || req.header.authorization?.split(" ")[1]
+    const token =req.cookies.token || req.headers.authorization?.split(" ")[1]
     if(!token){
         return res.status(401).json({
             message:"Unauthorize access, token is missing"
@@ -42,14 +42,14 @@ async function authSystemUserMiddleware(req,res,next){
     }
 
     const isBlacklisted = await tokenBlackListModel.findOne({token})
-    if(!isBlacklisted){
+    if(isBlacklisted){
         return res.status(401).json({
             message:"Unauthorized Access, Token is Invalid"
         })
     }
     
     try{
-        const decoded = jwt.verify(token,process.env.JWR_SECRET)
+        const decoded = jwt.verify(token,process.env.JWT_SECRET)
         const user = await userModel.findById(decoded.userId).select("+systemUser")
         if(!user.systemUser){
             return res.status(403).json({

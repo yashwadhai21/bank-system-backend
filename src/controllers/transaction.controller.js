@@ -10,15 +10,16 @@ async function createTransaction(req,res){
     /**
      * 1.Validate request
      */
-    const {fromAccount , toAccount , amount , idempotencyKey} = req.body
-    if(!fromAccount || !toAccount || !amount || !idempotencyKey){
+    const { toAccount , amount , idempotencyKey} = req.body
+    if(!toAccount || !amount || !idempotencyKey){
         return res.status(400).json({
-            message:"fromAccount , toAccount , amount , idempotencyKey are required"
+            message:"toAccount , amount , idempotencyKey are required"
         })
     }
     const fromUserAccount = await accountModel.findOne({
-        _id:fromAccount
+        _id:req.user._id
     })
+    const fromAccount = fromUserAccount._id
     const toUserAccount = await accountModel.findOne({
         _id:toAccount
     })
@@ -72,7 +73,7 @@ async function createTransaction(req,res){
      */
     const balance = await fromUserAccount.getbalance()
     if(balance < amount){
-        res.status(400).json({
+        return res.status(400).json({
             message:`Insufficient balance. Current balance is ${balance}. Requested amount is ${amount}`
         })
     }
@@ -110,7 +111,7 @@ async function createTransaction(req,res){
     //creating simulation of paise cut gye pr phohoche nhi
     //is dauran firse req daali to dobara pese nhi jaayenge coz idempotency key is same
     await (()=>{
-        return new Promise((resolve)=> setTimeout(resolve,15*1000))
+        return new Promise((resolve)=> setTimeout(resolve,15*1000))()
     })
 
     /**
@@ -179,6 +180,8 @@ async function createInitialFundsTransaction(req,res){
             mesage:"System User account not found"
         })
     }
+
+    const fromAccount = fromUserAccount._id
 
     const session = await mongoose.startSession() 
     session.startTransaction()
