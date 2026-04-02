@@ -20,6 +20,11 @@ const accountSchema = new mongoose.Schema({
         type:String,
         required:[true ,"Currency is required for creating an account"],
         default:"INR"
+    },
+    systemUser:{
+        type:Boolean,
+        default:false,
+        index:true
     }
 },{
     timestamps:true
@@ -61,7 +66,7 @@ accountSchema.methods.getBalance = async function(){
         }
     ])
 
-    if(balanceData.lenght === 0){
+    if(balanceData.length === 0){
         return 0
     }
 
